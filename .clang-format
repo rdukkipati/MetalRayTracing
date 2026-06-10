@@ -1,0 +1,58 @@
+AlignConsecutiveDeclarations:
+  Enabled: true
+  AcrossEmptyLines: true
+  AcrossComments: true
+  AlignFunctionDeclarations: false
+
+AlignConsecutiveAssignments: 
+  Enabled: true
+  AcrossEmptyLines: true
+  AcrossComments: true
+  AlignCompound: true
+  PadOperators: true
+
+AlignConsecutiveMacros:
+  Enabled: true
+  AcrossEmptyLines: true
+  AcrossComments: true
+
+PenaltyBreakAssignment: 100
+BreakBeforeBinaryOperators: None
+AlignOperands: Align
+
+BinPackArguments: true
+BinPackLongBracedList: true
+BinPackParameters: BinPack
+
+ColumnLimit: 80
+
+AlignArrayOfStructures: Right
+
+BreakBeforeBraces: Allman
+AlignAfterOpenBracket: true
+
+
+IndentWidth: 4
+UseTab: Never
+
+AllowShortFunctionsOnASingleLine: None
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseExpressionOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+
+BreakAfterReturnType: All
+
+SpaceBeforeParens: Custom
+SpaceBeforeParensOptions:
+  AfterControlStatements: false
+  AfterFunctionDeclarationName: false
+  AfterOverloadedOperator: false
+  BeforeNonEmptyParentheses: false
+
+IndentCaseLabels: true
+
+
+
