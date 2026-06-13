@@ -25,8 +25,8 @@ load_paths = {
  { load_paths_custom, .os = "mac"  },
 };
 
-build_macOS = "zsh game/code/build.sh";
-run_macOS = "zsh game/code/run.sh";
+build_macOS = "zsh RayTracing/code/build.sh";
+run_macOS = "zsh RayTracing/code/run.sh";
 
 command_list = 
 {
