@@ -28,6 +28,9 @@ typedef uint64_t u64;
 typedef float f32;
 typedef double f64;
 
+global_variable i32 Image_Height = 2234;
+global_variable i32 Image_Width = 3456;
+
 struct state
 {
     char ExecutablePath[PATH_MAX];
@@ -61,7 +64,8 @@ BuildFullPath(state *State, char *Filename, size_t Size, char *FullPath)
 {
     char *ExecutablePath = State->ExecutablePath;
     char *ExecutableDirectory = State->ExecutableDirectory;
-    for(int Index = 0; Index < ExecutableDirectory - ExecutablePath; ++Index)
+    int DirectoryLength = ExecutableDirectory - ExecutablePath;
+    for(int Index = 0; Index < DirectoryLength; ++Index)
     {
         *FullPath++ = *ExecutablePath++;
     }
@@ -82,22 +86,18 @@ i32 main(i32 argc, const char *argv[]) {
         NSString *NSExecutablePath = [NSString stringWithUTF8String:State.ExecutablePath];
         NSString *NSExecutableDirectory = [NSString stringWithUTF8String:State.ExecutableDirectory];
         
-        NSLog(@"%@\n", NSExecutablePath);
-        NSLog(@"%@\n", NSExecutableDirectory);
-                
         char MetalLibraryFilename[] = "shaders.metallib";
         char MetalLibraryFullPath[PATH_MAX];
         
         BuildFullPath(&State, MetalLibraryFilename, sizeof(MetalLibraryFilename), MetalLibraryFullPath);
         
-        NSString *NSMetalLibraryFullPath = [NSString stringWithUTF8String:MetalLibraryFullPath];
-        
-        NSLog(@"%@\n", NSMetalLibraryFullPath);
+        NSString *NSString_MetalLibraryFullPath = [NSString stringWithUTF8String:MetalLibraryFullPath];
+        NSURL *NSURL_MetalLibraryFullPath = [NSURL fileURLWithPath:NSString_MetalLibraryFullPath];
         
         id<MTLDevice> Device = MTLCreateSystemDefaultDevice();
         
-        NSError *Errors;
-        id<MTLLibrary> MetalLibrary = [Device newLibraryWithFile:NSMetalLibraryFullPath error:&Errors];
+        NSError *Errors = nil;
+        id<MTLLibrary> MetalLibrary = [Device newLibraryWithURL:NSURL_MetalLibraryFullPath error:&Errors];
         if(!MetalLibrary)
         {
             NSLog(@"Library load failed: %@", Errors);
@@ -108,7 +108,7 @@ i32 main(i32 argc, const char *argv[]) {
         
         id<MTLCommandQueue> CommandQueue = [Device newCommandQueueWithMaxCommandBufferCount:64];
         
-        MTLTextureDescriptor *TextureDescriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm width:3456 height:2234 mipmapped:NO];
+        MTLTextureDescriptor *TextureDescriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm width:Image_Width height:Image_Height mipmapped:NO];
         
         id<MTLTexture> Texture = [Device newTextureWithDescriptor:TextureDescriptor];
         
@@ -165,11 +165,11 @@ i32 main(i32 argc, const char *argv[]) {
         [RenderCommandEncoder endEncoding];
         [CommandBuffer commit];
         
-        [CommandBuffer waitUntilCompleted]; //3456 2234
+        [CommandBuffer waitUntilCompleted]; //Image_Width Image_Height
         
-        u8 *Pixels = (u8 *)malloc(2234 * (3456 * 4));
+        u8 *Pixels = (u8 *)malloc(Image_Height * (Image_Width * 4));
         
-        [Texture getBytes:Pixels bytesPerRow:3456*4 fromRegion:MTLRegionMake2D(0, 0, 3456, 2234) mipmapLevel:0];
+        [Texture getBytes:Pixels bytesPerRow:Image_Width*4 fromRegion:MTLRegionMake2D(0, 0, Image_Width, Image_Height) mipmapLevel:0];
         
         char OutputFilename[] = "output.ppm";
         char OutputFullPath[PATH_MAX];
@@ -177,13 +177,13 @@ i32 main(i32 argc, const char *argv[]) {
         BuildFullPath(&State, OutputFilename, sizeof(OutputFilename), OutputFullPath);
         
         FILE *File = fopen(OutputFullPath, "wb");
-        fprintf(File, "P6\n%d %d\n255\n", 3456, 2234);
+        fprintf(File, "P6\n%d %d\n255\n", Image_Width, Image_Height);
         
-        for(int Row = 0; Row < 2234; ++Row)
+        for(int Row = 0; Row < Image_Height; ++Row)
         {
-            for(int Col = 0; Col < 3456; ++Col)
+            for(int Col = 0; Col < Image_Width; ++Col)
             {
-                u8 *Pixel = Pixels + (Row * 3456 * 4) + (Col * 4);
+                u8 *Pixel = Pixels + (Row * Image_Width * 4) + (Col * 4);
                 fwrite(Pixel, 1, 3, File);
             }
         }
