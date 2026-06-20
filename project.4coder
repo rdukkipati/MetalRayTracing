@@ -27,6 +27,7 @@ load_paths = {
 
 build_macOS = "zsh RayTracing/code/build.sh";
 run_macOS = "zsh RayTracing/code/run.sh";
+format_macOS = "git ls-files '*.cpp' '*.mm' '*.h' '*.metal' | xargs clang-format -i";
 
 command_list = 
 {
@@ -51,9 +52,19 @@ command_list =
 			{run_macOS, .os = "mac"},
 		},
 	},
+    {
+		.name = "format",
+		.out = "*format*",
+		.footer_panel = true,
+		.save_dirty_files = true,
+		.cmd =
+		{
+			{format_macOS, .os = "mac"},
+		},
+	},
 
 };
 
 fkey_command[1] = "build";
 fkey_command[2] = "run";
-
+fkey_command[3] = "format";
