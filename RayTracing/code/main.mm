@@ -30,22 +30,64 @@ typedef uint64_t    u64;
 typedef float       f32;
 typedef double      f64;
 
-global_variable i32 Image_Height = 2234;
-global_variable i32 Image_Width  = 3456;
+global_variable i32 IMAGE_HEIGHT = 2234;
+global_variable i32 IMAGE_WIDTH  = 3456;
+global_variable i32 SAMPLES_PER_PIXEL = 100;
+
+// Note: look at compiler and linker flags
+
+struct camera
+{
+    int         ImageWidth;
+    int         ImageHeight;
+	int SamplesPerPixel;
+	float PixelSamplesScale;
+    simd_float3 Center;
+	simd_float3 PixelDelta_U;
+	simd_float3 PixelDelta_V;
+    simd_float3 ViewportUpperLeft;
+};
+
+internal void
+_Camera(camera *Camera)
+{
+    Camera->ImageHeight  = IMAGE_HEIGHT;
+    Camera->ImageWidth   = IMAGE_WIDTH;
+	
+	Camera->SamplesPerPixel = SAMPLES_PER_PIXEL;
+	Camera->PixelSamplesScale = 1.0f / Camera->SamplesPerPixel;
+
+    float FocalLength    = 1.0f;
+    float ViewportHeight = 2.0f;
+    float ViewportWidth  = ViewportHeight * ((float)IMAGE_WIDTH / IMAGE_HEIGHT);
+
+    Camera->Center       = simd_make_float3(0, 0, 0);
+
+    simd_float3 Viewport_U   = simd_make_float3(ViewportWidth, 0, 0);
+    simd_float3 Viewport_V   = simd_make_float3(0, -ViewportHeight, 0);
+
+	Camera->PixelDelta_U = Viewport_U / Camera->ImageWidth;
+	Camera->PixelDelta_V = Viewport_V / Camera->ImageHeight;
+
+    Camera->ViewportUpperLeft = Camera->Center -
+                                simd_make_float3(0, 0, FocalLength) -
+                                (Viewport_U / 2) -
+                                (Viewport_V / 2);
+}
 
 struct sphere
 {
-	simd_float1 Radius;
-	simd_float3 Center;
+    simd_float1 Radius;
+    simd_float3 Center;
 };
 
 internal sphere
 _Sphere(simd_float1 Radius, simd_float3 Center)
 {
-	sphere Result;
-	Result.Radius = Radius;
-	Result.Center = Center;
-	return Result;
+    sphere Result;
+    Result.Radius = Radius;
+    Result.Center = Center;
+    return Result;
 }
 
 struct state
@@ -133,15 +175,18 @@ main(i32 argc, const char *argv[])
         id<MTLFunction>          FragmentFunction  = [MetalLibrary
             newFunctionWithName:@"FragmentFunction"];
 
+        // Note: for game rendering loop, will need to limit # of frames in
+        // flight so that command queue does not overflow
         id<MTLCommandQueue>      CommandQueue      = [Device
             newCommandQueueWithMaxCommandBufferCount:64];
 
         MTLTextureDescriptor    *TextureDescriptor = [MTLTextureDescriptor
             texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
-                                         width:Image_Width
-                                        height:Image_Height
+                                         width:IMAGE_WIDTH
+                                        height:IMAGE_HEIGHT
                                      mipmapped:NO];
 
+        // Note: textures expensive to create
         id<MTLTexture>           Texture           = [Device
             newTextureWithDescriptor:TextureDescriptor];
 
@@ -196,6 +241,7 @@ main(i32 argc, const char *argv[])
             -1.0f, 1.0f,  0.0f, 0.0f, 1.0f,  1.0f,  1.0f, 0.0f,
         };
 
+        // Note: Buffers expensive to create
         id<MTLBuffer> VertexBuffer = [Device
             newBufferWithBytes:VerticesAndUVs
                         length:sizeof(VerticesAndUVs)
@@ -203,19 +249,39 @@ main(i32 argc, const char *argv[])
 
         [RenderCommandEncoder setVertexBuffer:VertexBuffer offset:0 atIndex:0];
 
-		sphere Spheres[10];
-		Spheres[0] = _Sphere(0.5f, simd_make_float3(0, 0, -1));
-		Spheres[1] = _Sphere(100.0f, simd_make_float3(0, -100.5f, -1));
+        sphere Spheres[10];
+        Spheres[0] = _Sphere(0.5f, simd_make_float3(0, 0, -1));
+        Spheres[1] = _Sphere(100.0f, simd_make_float3(0, -100.5f, -1));
 
-		id<MTLBuffer> SphereBuffer = [Device newBufferWithBytes:Spheres length:sizeof(Spheres) options:0];
+        // Note: Buffers expensive to create
+        id<MTLBuffer> SphereBuffer = [Device newBufferWithBytes:Spheres
+                                                         length:sizeof(Spheres)
+                                                        options:0];
 
-		[RenderCommandEncoder setFragmentBuffer:SphereBuffer offset:0 atIndex:1];
+        [RenderCommandEncoder setFragmentBuffer:SphereBuffer
+                                         offset:0
+                                        atIndex:1];
 
-		u32 SphereCount = 2;
+        u32           SphereCount       = 2;
 
-		id<MTLBuffer> SphereCountBuffer = [Device newBufferWithBytes:&SphereCount length:sizeof(SphereCount) options:0];
+        // Note: Buffers expensive to create
+        id<MTLBuffer> SphereCountBuffer = [Device
+            newBufferWithBytes:&SphereCount
+                        length:sizeof(SphereCount)
+                       options:0];
 
-		[RenderCommandEncoder setFragmentBuffer:SphereCountBuffer offset:0 atIndex:2];
+        [RenderCommandEncoder setFragmentBuffer:SphereCountBuffer
+                                         offset:0
+                                        atIndex:2];
+
+        camera Camera = {};
+        _Camera(&Camera);
+        id<MTLBuffer> CameraBuffer = [Device newBufferWithBytes:&Camera
+                                                         length:sizeof(Camera)
+                                                        options:0];
+        [RenderCommandEncoder setFragmentBuffer:CameraBuffer
+                                         offset:0
+                                        atIndex:3];
 
         [RenderCommandEncoder drawPrimitives:MTLPrimitiveTypeTriangle
                                  vertexStart:0
@@ -224,13 +290,13 @@ main(i32 argc, const char *argv[])
         [RenderCommandEncoder endEncoding];
         [CommandBuffer commit];
 
-        [CommandBuffer waitUntilCompleted]; // Image_Width Image_Height
+        [CommandBuffer waitUntilCompleted]; // IMAGE_WIDTH IMAGE_HEIGHT
 
-        u8 *Pixels = (u8 *)malloc(Image_Height * (Image_Width * 4));
+        u8 *Pixels = (u8 *)malloc(IMAGE_HEIGHT * (IMAGE_WIDTH * 4));
 
         [Texture getBytes:Pixels
-              bytesPerRow:Image_Width * 4
-               fromRegion:MTLRegionMake2D(0, 0, Image_Width, Image_Height)
+              bytesPerRow:IMAGE_WIDTH * 4
+               fromRegion:MTLRegionMake2D(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT)
               mipmapLevel:0];
 
         char OutputFilename[] = "output.ppm";
@@ -240,13 +306,13 @@ main(i32 argc, const char *argv[])
                       OutputFullPath);
 
         FILE *File = fopen(OutputFullPath, "wb");
-        fprintf(File, "P6\n%d %d\n255\n", Image_Width, Image_Height);
+        fprintf(File, "P6\n%d %d\n255\n", IMAGE_WIDTH, IMAGE_HEIGHT);
 
-        for(int Row = 0; Row < Image_Height; ++Row)
+        for(int Row = 0; Row < IMAGE_HEIGHT; ++Row)
         {
-            for(int Col = 0; Col < Image_Width; ++Col)
+            for(int Col = 0; Col < IMAGE_WIDTH; ++Col)
             {
-                u8 *Pixel = Pixels + (Row * Image_Width * 4) + (Col * 4);
+                u8 *Pixel = Pixels + (Row * IMAGE_WIDTH * 4) + (Col * 4);
                 fwrite(Pixel, 1, 3, File);
             }
         }

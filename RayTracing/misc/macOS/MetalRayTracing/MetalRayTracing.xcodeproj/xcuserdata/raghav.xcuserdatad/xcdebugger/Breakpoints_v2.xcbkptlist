@@ -16,7 +16,7 @@
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "62"
             endingLineNumber = "62"
-            landmarkName = "_Sphere(Radius, Center)"
+            landmarkName = "_Camera(Camera)"
             landmarkType = "9">
          </BreakpointContent>
       </BreakpointProxy>
