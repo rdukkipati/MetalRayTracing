@@ -185,7 +185,7 @@ main(i32 argc, const char *argv[])
             newCommandQueueWithMaxCommandBufferCount:64];
 
         MTLTextureDescriptor    *TextureDescriptor = [MTLTextureDescriptor
-            texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+            texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm_sRGB
                                          width:IMAGE_WIDTH
                                         height:IMAGE_HEIGHT
                                      mipmapped:NO];
@@ -214,7 +214,7 @@ main(i32 argc, const char *argv[])
         RenderPipelineDescriptor.vertexFunction   = VertexFunction;
         RenderPipelineDescriptor.fragmentFunction = FragmentFunction;
         RenderPipelineDescriptor.colorAttachments[0].pixelFormat =
-            MTLPixelFormatRGBA8Unorm;
+            MTLPixelFormatRGBA8Unorm_sRGB;
 
         MTLVertexDescriptor *VertexDescriptor = [[MTLVertexDescriptor alloc]
             init];

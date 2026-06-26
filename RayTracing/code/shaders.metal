@@ -1,3 +1,6 @@
+// Note: recursion seems to be inlined by compiler because normally it 
+//	   isn't allowed
+
 #include <metal_stdlib>
 
 using namespace metal;
@@ -8,6 +11,25 @@ using namespace metal;
 typedef float3 vec3;
 typedef float3 point3;
 typedef float3 color3;
+
+enum material_type
+{
+	LAMBERTIAN,
+	METAL,
+};
+
+struct material
+{
+	material_type Type;
+	color3 Albedo;
+};
+
+internal material
+_Material(material_type Type, color3 Albedo)
+{
+	material Result = {Type, Albedo};
+	return Result;
+}
 
 internal float
 LengthSq_vec3(vec3 Vector)
@@ -190,6 +212,7 @@ struct sphere
 {
     float  Radius;
     point3 Center;
+	
 };
 
 struct world
@@ -302,6 +325,16 @@ GetRandomRay(int x, int y, constant camera *Camera, thread rng *RNG)
 
 	return _Ray(RayOrigin, RayDirection);
 	
+}
+
+internal float
+LinearToGamma(float LinearComponent)
+{
+	if(LinearComponent > 0)
+	{
+		return sqrt(LinearComponent);
+	}
+	return 0;
 }
 
 struct vertex_in
