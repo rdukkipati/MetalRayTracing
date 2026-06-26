@@ -33,6 +33,7 @@ typedef double      f64;
 global_variable i32 IMAGE_HEIGHT = 2234;
 global_variable i32 IMAGE_WIDTH  = 3456;
 global_variable i32 SAMPLES_PER_PIXEL = 100;
+global_variable i32 MAX_RAY_BOUNCES = 10;
 
 // Note: look at compiler and linker flags
 
@@ -42,6 +43,7 @@ struct camera
     int         ImageHeight;
 	int SamplesPerPixel;
 	float PixelSamplesScale;
+	int MaxRayBounces;
     simd_float3 Center;
 	simd_float3 PixelDelta_U;
 	simd_float3 PixelDelta_V;
@@ -56,6 +58,8 @@ _Camera(camera *Camera)
 	
 	Camera->SamplesPerPixel = SAMPLES_PER_PIXEL;
 	Camera->PixelSamplesScale = 1.0f / Camera->SamplesPerPixel;
+
+	Camera->MaxRayBounces = MAX_RAY_BOUNCES;
 
     float FocalLength    = 1.0f;
     float ViewportHeight = 2.0f;

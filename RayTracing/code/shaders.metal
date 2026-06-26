@@ -9,6 +9,13 @@ typedef float3 vec3;
 typedef float3 point3;
 typedef float3 color3;
 
+internal float
+LengthSq_vec3(vec3 Vector)
+{
+	float Result = dot(Vector, Vector);
+	return Result;
+}
+
 struct rng
 {
 	uint64_t State;
@@ -50,12 +57,55 @@ Random_f32_InRange(float Min, float Max, thread rng *RNG)
 	return Min + (Max - Min) * Random_f32(RNG);
 }
 
+internal vec3
+Random_v3(thread rng *RNG)
+{
+	return vec3(Random_f32(RNG), Random_f32(RNG), Random_f32(RNG));
+}
+
+internal vec3
+Random_v3_InRange(float Min, float Max, thread rng *RNG)
+{
+	return vec3(Random_f32_InRange(Min, Max, RNG), 
+				Random_f32_InRange(Min, Max, RNG), 
+				Random_f32_InRange(Min, Max, RNG));
+}
+
+internal vec3
+RandomUnitVector(thread rng *RNG)
+{
+	while(true)
+	{
+		vec3 RandomVector = Random_v3_InRange(-1, 1, RNG);
+		float LengthSquared = LengthSq_vec3(RandomVector);
+		if(1e-20f < LengthSquared && LengthSquared <= 1)
+		{
+			return RandomVector / sqrt(LengthSquared);
+		}
+	}
+}
+
+internal vec3
+RandomVectorOnHemisphere(vec3 Normal, thread rng *RNG)
+{
+	vec3 OnUnitSphere = RandomUnitVector(RNG);
+	if(dot(OnUnitSphere, Normal) > 0.0f)
+	{
+		return OnUnitSphere;
+	}
+	else
+	{
+		return -OnUnitSphere;
+	}
+}
+
 struct camera
 {
     int    ImageWidth;
     int    ImageHeight;
 	int SamplesPerPixel;
 	float PixelSamplesScale;
+	int MaxRayBounces;
     point3 Center;
     vec3   PixelDelta_U;
     vec3   PixelDelta_V;
@@ -216,12 +266,18 @@ HitWorld(world World, ray Ray, interval Interval, thread hit *Hit)
 }
 
 internal color3
-RayColor(ray Ray, world World)
+RayColor(ray Ray, int RayBouncesRemaining, world World, thread rng *RNG)
 {
+	if(RayBouncesRemaining <= 0)
+	{
+		return vec3(0, 0, 0);
+	}
     hit Hit;
-    if(HitWorld(World, Ray, _Interval(0, INFINITY), &Hit))
+    if(HitWorld(World, Ray, _Interval(0.001f, INFINITY), &Hit))
     {
-        return 0.5f * (Hit.Normal + color3(1, 1, 1));
+		vec3 Direction = Hit.Normal + RandomUnitVector(RNG);
+		return 0.5f * RayColor(_Ray(Hit.Point, Direction), 
+							   RayBouncesRemaining - 1, World, RNG);
     }
 
     vec3   UnitDirection = normalize(Ray.Direction);
@@ -299,7 +355,7 @@ FragmentFunction(vertex_out       Fragment [[stage_in]],
 	for(int Sample = 0; Sample < Camera->SamplesPerPixel; ++Sample)
 	{
 		ray Ray = GetRandomRay(x, y, Camera, &RNG);
-		PixelColor += RayColor(Ray, World);
+		PixelColor += RayColor(Ray, Camera->MaxRayBounces, World, &RNG);
 	}
 
 	PixelColor *= Camera->PixelSamplesScale;
