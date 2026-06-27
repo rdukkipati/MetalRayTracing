@@ -12,50 +12,43 @@ typedef float3 vec3;
 typedef float3 point3;
 typedef float3 color3;
 
-enum material_type
-{
-	LAMBERTIAN,
-	METAL,
-};
+typedef int8_t  i8;
+typedef int16_t i16;
+typedef int32_t i32;
+typedef int64_t i64;
 
-struct material
-{
-	material_type Type;
-	color3 Albedo;
-};
+typedef uint8_t     u8;
+typedef uint16_t    u16;
+typedef uint32_t    u32;
+typedef uint64_t    u64;
 
-internal material
-_Material(material_type Type, color3 Albedo)
-{
-	material Result = {Type, Albedo};
-	return Result;
-}
+typedef float       f32;
 
-internal float
+internal f32
 LengthSq_vec3(vec3 Vector)
 {
-	float Result = dot(Vector, Vector);
+	f32 Result = dot(Vector, Vector);
 	return Result;
 }
 
 struct rng
 {
-	uint64_t State;
-	uint64_t SequenceConstant;
+	u64 State;
+	u64 SequenceConstant;
 };
 
-internal uint32_t
+internal u32
 Random_u32(thread rng *RNG)
 {
-	uint64_t OldState = RNG->State;
+	u64 OldState = RNG->State;
 	RNG->State = OldState * 6364136223846793005ULL + RNG->SequenceConstant;
-	uint32_t Xorshifted = ((OldState >> 18u) ^ OldState) >> 27u;
-	uint32_t Rot = OldState >> 59u;
+	u32 Xorshifted = ((OldState >> 18u) ^ OldState) >> 27u;
+	u32 Rot = OldState >> 59u;
 	return (Xorshifted >> Rot) | (Xorshifted << ((-Rot) & 31));
 }
 
 internal void
-InitializeRNG(thread rng *RNG, uint64_t InitialState, uint64_t StreamID)
+InitializeRNG(thread rng *RNG, u64 InitialState, u64 StreamID)
 {
 	RNG->State = 0U;
 	RNG->SequenceConstant = (StreamID << 1u) | 1u;
@@ -64,29 +57,29 @@ InitializeRNG(thread rng *RNG, uint64_t InitialState, uint64_t StreamID)
 	Random_u32(RNG);
 }
 
-internal float
+internal f32
 Random_f32(thread rng *RNG)
 {
-	uint32_t Value = Random_u32(RNG);
-	uint32_t Bits = (Value >> 9) | 0x3f800000;
-	float Result = as_type<float>(Bits);
+	u32 Value = Random_u32(RNG);
+	u32 Bits = (Value >> 9) | 0x3f800000;
+	f32 Result = as_type<f32>(Bits);
 	return Result - 1.0f;
 }
 
-internal float
-Random_f32_InRange(float Min, float Max, thread rng *RNG)
+internal f32
+Random_f32_InRange(f32 Min, f32 Max, thread rng *RNG)
 {
 	return Min + (Max - Min) * Random_f32(RNG);
 }
 
 internal vec3
-Random_v3(thread rng *RNG)
+Random_vec3(thread rng *RNG)
 {
 	return vec3(Random_f32(RNG), Random_f32(RNG), Random_f32(RNG));
 }
 
 internal vec3
-Random_v3_InRange(float Min, float Max, thread rng *RNG)
+Random_vec3_InRange(f32 Min, f32 Max, thread rng *RNG)
 {
 	return vec3(Random_f32_InRange(Min, Max, RNG), 
 				Random_f32_InRange(Min, Max, RNG), 
@@ -98,8 +91,8 @@ RandomUnitVector(thread rng *RNG)
 {
 	while(true)
 	{
-		vec3 RandomVector = Random_v3_InRange(-1, 1, RNG);
-		float LengthSquared = LengthSq_vec3(RandomVector);
+		vec3 RandomVector = Random_vec3_InRange(-1, 1, RNG);
+		f32 LengthSquared = LengthSq_vec3(RandomVector);
 		if(1e-20f < LengthSquared && LengthSquared <= 1)
 		{
 			return RandomVector / sqrt(LengthSquared);
@@ -121,33 +114,43 @@ RandomVectorOnHemisphere(vec3 Normal, thread rng *RNG)
 	}
 }
 
+internal bool
+VectorNearZero(vec3 Vector)
+{
+	f32 NearZero_Epsilon = 1e-8f;
+	bool NearZero = (fabs(Vector.x) < NearZero_Epsilon) && 
+					(fabs(Vector.y) < NearZero_Epsilon) && 
+					(fabs(Vector.z) < NearZero_Epsilon);
+	return NearZero;
+}
+
 struct camera
 {
-    int    ImageWidth;
-    int    ImageHeight;
-	int SamplesPerPixel;
-	float PixelSamplesScale;
-	int MaxRayBounces;
+    i32    ImageWidth;
+    i32    ImageHeight;
+	i32 SamplesPerPixel;
+	f32 PixelSamplesScale;
+	i32 MaxRayBounces;
     point3 Center;
     vec3   PixelDelta_U;
     vec3   PixelDelta_V;
     point3 ViewportUpperLeft;
 };
 
-internal float
-DegreesToRadians(float Degrees)
+internal f32
+DegreesToRadians(f32 Degrees)
 {
     return Degrees * PI / 180.0f;
 }
 
 struct interval
 {
-    float Min;
-    float Max;
+    f32 Min;
+    f32 Max;
 };
 
 internal interval
-_Interval(float Min, float Max)
+_Interval(f32 Min, f32 Max)
 {
     interval Result;
     Result.Min = Min;
@@ -162,19 +165,19 @@ IntervalSize(interval Interval)
 }
 
 internal bool
-IntervalContains(interval Interval, float Value)
+IntervalContains(interval Interval, f32 Value)
 {
     return Interval.Min <= Value && Value <= Interval.Max;
 }
 
 internal bool
-IntervalSurrounds(interval Interval, float Value)
+IntervalSurrounds(interval Interval, f32 Value)
 {
     return Interval.Min < Value && Value < Interval.Max;
 }
 
-internal float
-IntervalClamp(interval Interval, float Value)
+internal f32
+IntervalClamp(interval Interval, f32 Value)
 {
     if(Value < Interval.Min)
     {
@@ -203,31 +206,127 @@ _Ray(point3 Origin, vec3 Direction)
 }
 
 internal point3
-RayAt(ray Ray, float Time)
+RayAt(ray Ray, f32 Time)
 {
     return Ray.Origin + (Time * Ray.Direction);
 }
 
+enum material_type : u32
+{
+	LAMBERTIAN,
+	METAL,
+};
+
+struct material
+{
+	material_type Type;
+	color3 Albedo;
+	f32 Fuzz;
+};
+
 struct sphere
 {
-    float  Radius;
+    f32  Radius;
     point3 Center;
-	
+	material Material;
 };
 
 struct world
 {
     constant sphere *Spheres;
-    uint             SphereCount;
+    u32             SphereCount;
 };
 
 struct hit
 {
     point3 Point;
     vec3   Normal;
-    float  Time;
+    f32  Time;
     bool   Outside;
+	material Material;
 };
+
+internal bool
+LambertianScatter(ray Ray, thread hit *Hit, thread color3 *Attenuation, 
+				  thread ray *ScatteredRay, thread rng *RNG)
+{
+	vec3 ScatterDirection = Hit->Normal + RandomUnitVector(RNG);
+
+	if(VectorNearZero(ScatterDirection))
+	{
+		ScatterDirection = Hit->Normal;
+	}
+
+	*ScatteredRay = _Ray(Hit->Point, ScatterDirection);
+	*Attenuation = Hit->Material.Albedo;
+	return true;
+}
+
+internal vec3
+Reflect(vec3 IncomingVector, vec3 Normal)
+{
+	return IncomingVector - 2 * dot(IncomingVector, Normal) * Normal;
+}
+
+internal bool
+MetalScatter(ray Ray, thread hit *Hit, thread color3 *Attenuation, 
+			 thread ray *ScatteredRay, thread rng *RNG)
+{
+	vec3 Reflected = Reflect(Ray.Direction, Hit->Normal);
+	Reflected = normalize(Reflected) + 
+				(Hit->Material.Fuzz * RandomUnitVector(RNG));
+	*ScatteredRay = _Ray(Hit->Point, Reflected);
+	*Attenuation = Hit->Material.Albedo;
+	return (dot(ScatteredRay->Direction, Hit->Normal) > 0);
+}
+
+internal vec3
+Refract(vec3 IncomingVector, vec3 Normal, f32 RefractiveRatio)
+{
+	f32 CosTheta = min(dot(-IncomingVector, Normal), 1.0f);
+	vec3 Perpendicular = RefractiveRatio * (IncomingVector + CosTheta * Normal);
+	vec3 Parallel = -sqrt(fabs(1.0f - LengthSq_vec3(Perpendicular))) * Normal;
+	return Perpendicular + Parallel;
+}
+
+internal f32
+Reflectance(f32 Cosine, f32 RefractionIndex)
+{
+	f32 r0 = (1 - RefractionIndex) / (1 + RefractionIndex);
+	r0 = r0 * r0;
+	return r0 + (1 - r0) * pow((1 - Cosine), 5.0f);
+}
+
+internal bool
+DielectricScatter(ray Ray, thread hit *Hit, thread color *Attenuation, 
+				  thread ray *ScatteredRay, thread rng *RNG)
+{
+	*Attenuation = color3(1.0f, 1.0f, 1.0f);
+	f32 RefractionIndex = Hit->Material.RefractionIndex;
+}
+
+internal bool
+Scatter(ray Ray, thread hit *Hit, thread color3 *Attenuation, 
+		thread ray *ScatteredRay, thread rng *RNG)
+{
+	bool Result = false;
+	switch(Hit->Material.Type)
+	{
+		case LAMBERTIAN:
+		{
+			Result = LambertianScatter(Ray, Hit, Attenuation, ScatteredRay, RNG);
+		}
+		break;
+
+		case METAL:
+		{
+			Result = MetalScatter(Ray, Hit, Attenuation, ScatteredRay, RNG);
+		}
+		break;
+	}
+
+	return Result;
+}
 
 internal void
 SetFaceNormal(ray Ray, vec3 OutwardNormal, thread hit *Hit)
@@ -239,19 +338,19 @@ SetFaceNormal(ray Ray, vec3 OutwardNormal, thread hit *Hit)
 internal bool
 HitSphere(sphere Sphere, ray Ray, interval Interval, thread hit *Hit)
 {
-    float Radius         = Sphere.Radius;
+    f32 Radius         = Sphere.Radius;
     vec3  OriginToCenter = Sphere.Center - Ray.Origin;
-    float a              = dot(Ray.Direction, Ray.Direction);
-    float h              = dot(Ray.Direction, OriginToCenter);
-    float c            = dot(OriginToCenter, OriginToCenter) - Radius * Radius;
-    float Discriminant = h * h - a * c;
+    f32 a              = dot(Ray.Direction, Ray.Direction);
+    f32 h              = dot(Ray.Direction, OriginToCenter);
+    f32 c            = dot(OriginToCenter, OriginToCenter) - Radius * Radius;
+    f32 Discriminant = h * h - a * c;
 
     if(Discriminant < 0)
     {
         return false;
     }
-    float Root = sqrt(Discriminant);
-    float Time = (h - Root) / a;
+    f32 Root = sqrt(Discriminant);
+    f32 Time = (h - Root) / a;
     if(!IntervalSurrounds(Interval, Time))
     {
         Time = (h + Root) / a;
@@ -264,6 +363,7 @@ HitSphere(sphere Sphere, ray Ray, interval Interval, thread hit *Hit)
     Hit->Point         = RayAt(Ray, Time);
     vec3 OutwardNormal = (Hit->Point - Sphere.Center) / Sphere.Radius;
     SetFaceNormal(Ray, OutwardNormal, Hit);
+	Hit->Material = Sphere.Material;
 
     return true;
 }
@@ -272,9 +372,9 @@ internal bool
 HitWorld(world World, ray Ray, interval Interval, thread hit *Hit)
 {
     bool  HitAnything = false;
-    float ClosestTime = Interval.Max;
+    f32 ClosestTime = Interval.Max;
 
-    for(uint Count = 0; Count < World.SphereCount; ++Count)
+    for(u32 Count = 0; Count < World.SphereCount; ++Count)
     {
         sphere Sphere = World.Spheres[Count];
         Interval.Max  = ClosestTime;
@@ -289,29 +389,42 @@ HitWorld(world World, ray Ray, interval Interval, thread hit *Hit)
 }
 
 internal color3
-RayColor(ray Ray, int RayBouncesRemaining, world World, thread rng *RNG)
+RayColor(ray Ray, i32 RayBouncesRemaining, world World, thread rng *RNG)
 {
 	if(RayBouncesRemaining <= 0)
 	{
 		return vec3(0, 0, 0);
 	}
+	color3 Color;
     hit Hit;
     if(HitWorld(World, Ray, _Interval(0.001f, INFINITY), &Hit))
     {
-		vec3 Direction = Hit.Normal + RandomUnitVector(RNG);
-		return 0.5f * RayColor(_Ray(Hit.Point, Direction), 
-							   RayBouncesRemaining - 1, World, RNG);
+		ray ScatteredRay;
+		color3 Attenuation;
+		if(Scatter(Ray, &Hit, &Attenuation, &ScatteredRay, RNG))
+		{
+			Color = Attenuation * 
+					RayColor(ScatteredRay, RayBouncesRemaining - 1, World, RNG);
+		}
+		else
+		{
+			Color = vec3(0, 0, 0);
+		}
     }
+	
+	else
+	{
+		vec3 UnitDirection = normalize(Ray.Direction);
+		f32 LerpFactor = 0.5f * (UnitDirection.y + 1.0f);
+		Color = mix(color3(1.0, 1.0, 1.0), color3(0.5, 0.7, 1.0), LerpFactor);
+	}
 
-    vec3   UnitDirection = normalize(Ray.Direction);
-    float  LerpFactor    = 0.5f * (UnitDirection.y + 1.0f);
-    color3 SkyColor      = mix(float3(1.0, 1.0, 1.0), float3(0.5, 0.7, 1.0),
-                               LerpFactor);
-    return SkyColor;
+	return Color;
+
 }
 
 internal ray
-GetRandomRay(int x, int y, constant camera *Camera, thread rng *RNG)
+GetRandomRay(i32 x, i32 y, constant camera *Camera, thread rng *RNG)
 {
 	vec3 Offset = vec3(Random_f32(RNG), Random_f32(RNG), 0);
 	
@@ -327,8 +440,8 @@ GetRandomRay(int x, int y, constant camera *Camera, thread rng *RNG)
 	
 }
 
-internal float
-LinearToGamma(float LinearComponent)
+internal f32
+LinearToGamma(f32 LinearComponent)
 {
 	if(LinearComponent > 0)
 	{
@@ -368,14 +481,14 @@ VertexFunction(vertex_in Vertex [[stage_in]])
 [[fragment]] fragment_out
 FragmentFunction(vertex_out       Fragment [[stage_in]],
                  constant sphere *Spheres [[buffer(1)]],
-                 constant uint   *SphereCount [[buffer(2)]],
+                 constant u32   *SphereCount [[buffer(2)]],
                  constant camera *Camera [[buffer(3)]])
 {
 
-	uint32_t x = (uint32_t)Fragment.Position.x;
-	uint32_t y = (uint32_t)Fragment.Position.y;
+	u32 x = (u32)Fragment.Position.x;
+	u32 y = (u32)Fragment.Position.y;
 
-	uint64_t RNGStream = y * Camera->ImageWidth + x;
+	u64 RNGStream = y * Camera->ImageWidth + x;
 	rng RNG = {};
 	InitializeRNG(&RNG, 0, RNGStream);
 
@@ -385,7 +498,7 @@ FragmentFunction(vertex_out       Fragment [[stage_in]],
 
 	color3 PixelColor = color3(0, 0, 0);
 
-	for(int Sample = 0; Sample < Camera->SamplesPerPixel; ++Sample)
+	for(i32 Sample = 0; Sample < Camera->SamplesPerPixel; ++Sample)
 	{
 		ray Ray = GetRandomRay(x, y, Camera, &RNG);
 		PixelColor += RayColor(Ray, Camera->MaxRayBounces, World, &RNG);
