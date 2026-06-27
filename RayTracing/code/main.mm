@@ -99,6 +99,7 @@ enum material_type : u32
 {
 	LAMBERTIAN,
 	METAL,
+	DIELECTRIC,
 };
 
 struct material
@@ -106,15 +107,17 @@ struct material
 	material_type Type;
 	color3 Albedo;
 	f32 Fuzz;
+	f32 RefractionIndex;
 };
 
 internal material
-_Material(material_type Type, color3 Albedo, f32 Fuzz)
+_Material(material_type Type, color3 Albedo, f32 Fuzz, f32 RefractionIndex)
 {
 	material Result;
 	Result.Type = Type;
 	Result.Albedo = Albedo;
 	Result.Fuzz = Fuzz;
+	Result.RefractionIndex = RefractionIndex;
 	return Result;
 }
 
@@ -294,16 +297,19 @@ main(i32 argc, const char *argv[])
 
         [RenderCommandEncoder setVertexBuffer:VertexBuffer offset:0 atIndex:0];
 
-		material Ground = _Material(LAMBERTIAN, _Color3(0.8f, 0.8f, 0.0f), 0);
-		material Center = _Material(LAMBERTIAN, _Color3(0.1f, 0.2f, 0.5f), 0);
-		material Left = _Material(METAL, _Color3(0.8f, 0.8f, 0.8f), 0.3f);
-		material Right = _Material(METAL, _Color3(0.8f, 0.6f, 0.2f), 1.0f);
+		material Ground = _Material(LAMBERTIAN, _Color3(0.8f, 0.8f, 0.0f), 0, 0);
+		material Center = _Material(LAMBERTIAN, _Color3(0.1f, 0.2f, 0.5f), 0, 0);
+		material Left = _Material(DIELECTRIC, _Color3(0, 0, 0), 0, 1.50f);
+		material Bubble = _Material(DIELECTRIC, _Color3(0, 0, 0), 0, 
+									1.00f / 1.50f);
+		material Right = _Material(METAL, _Color3(0.8f, 0.6f, 0.2f), 0, 0);
 
         sphere Spheres[10];
 		Spheres[0] = _Sphere(100.0f, _Point3(0.0f, -100.5f, -1.0f), Ground);
 		Spheres[1] = _Sphere(0.5f, _Point3(0.0f, 0.0f, -1.2f), Center);
 		Spheres[2] = _Sphere(0.5f, _Point3(-1.0f, 0.0f, -1.0f), Left);
-		Spheres[3] = _Sphere(0.5f, _Point3(1.0f, 0.0f, -1.0f), Right);
+		Spheres[3] = _Sphere(0.4f, _Point3(-1.0f, 0.0f, -1.0f), Bubble);
+		Spheres[4] = _Sphere(0.5f, _Point3(1.0f, 0.0f, -1.0f), Right);
 
         // Note: Buffers expensive to create
         id<MTLBuffer> SphereBuffer = [Device newBufferWithBytes:Spheres
@@ -314,7 +320,7 @@ main(i32 argc, const char *argv[])
                                          offset:0
                                         atIndex:1];
 
-        u32           SphereCount       = 4;
+        u32           SphereCount       = 5;
 
         // Note: Buffers expensive to create
         id<MTLBuffer> SphereCountBuffer = [Device

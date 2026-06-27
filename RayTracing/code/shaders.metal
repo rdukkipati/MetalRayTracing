@@ -215,6 +215,7 @@ enum material_type : u32
 {
 	LAMBERTIAN,
 	METAL,
+	DIELECTRIC,
 };
 
 struct material
@@ -222,6 +223,7 @@ struct material
 	material_type Type;
 	color3 Albedo;
 	f32 Fuzz;
+	f32 RefractionIndex;
 };
 
 struct sphere
@@ -298,11 +300,32 @@ Reflectance(f32 Cosine, f32 RefractionIndex)
 }
 
 internal bool
-DielectricScatter(ray Ray, thread hit *Hit, thread color *Attenuation, 
+DielectricScatter(ray Ray, thread hit *Hit, thread color3 *Attenuation, 
 				  thread ray *ScatteredRay, thread rng *RNG)
 {
 	*Attenuation = color3(1.0f, 1.0f, 1.0f);
 	f32 RefractionIndex = Hit->Material.RefractionIndex;
+	f32 RefractiveRatio = Hit->Outside ? (1.0f / RefractionIndex) 
+									   : RefractionIndex;
+
+	vec3 UnitDirection = normalize(Ray.Direction);
+	f32 CosTheta = min(dot(-UnitDirection, Hit->Normal), 1.0f);
+	f32 SinTheta = sqrt(1.0f - CosTheta * CosTheta);
+	
+	bool CannotRefract = RefractiveRatio * SinTheta > 1.0f;
+	vec3 Direction;
+
+	if(CannotRefract || Reflectance(CosTheta, RefractiveRatio) > Random_f32(RNG))
+	{
+		Direction = Reflect(UnitDirection, Hit->Normal);
+	}
+	else
+	{
+		Direction = Refract(UnitDirection, Hit->Normal, RefractiveRatio);
+	}
+
+	*ScatteredRay = _Ray(Hit->Point, Direction);
+	return true;
 }
 
 internal bool
@@ -321,6 +344,12 @@ Scatter(ray Ray, thread hit *Hit, thread color3 *Attenuation,
 		case METAL:
 		{
 			Result = MetalScatter(Ray, Hit, Attenuation, ScatteredRay, RNG);
+		}
+		break;
+
+		case DIELECTRIC:
+		{
+			Result = DielectricScatter(Ray, Hit, Attenuation, ScatteredRay, RNG);
 		}
 		break;
 	}
