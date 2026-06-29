@@ -6,7 +6,6 @@
 using namespace metal;
 
 #define internal static
-#define PI       3.14159265359f
 
 typedef float3   vec3;
 typedef float3   point3;
@@ -131,17 +130,12 @@ struct camera
     i32    SamplesPerPixel;
     f32    PixelSamplesScale;
     i32    MaxRayBounces;
+	f32 VerticalFieldOfView;
     point3 Center;
     vec3   PixelDelta_U;
     vec3   PixelDelta_V;
     point3 ViewportUpperLeft;
 };
-
-internal f32
-DegreesToRadians(f32 Degrees)
-{
-    return Degrees * PI / 180.0f;
-}
 
 struct interval
 {

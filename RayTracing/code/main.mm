@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 #define internal        static
 #define local_persist   static
@@ -34,12 +35,48 @@ typedef simd_float3 vec3;
 typedef simd_float3 point3;
 typedef simd_float3 color3;
 
+#define PI       3.14159265359f
+
+internal color3
+_Color3(f32 X, f32 Y, f32 Z)
+{
+    return simd_make_float3(X, Y, Z);
+}
+
+internal point3
+_Point3(f32 X, f32 Y, f32 Z)
+{
+    return simd_make_float3(X, Y, Z);
+}
+
+internal vec3
+_Vec3(f32 X, f32 Y, f32 Z)
+{
+	return simd_make_float3(X, Y, Z);
+}
+
 global_variable i32 IMAGE_HEIGHT      = 2234;
 global_variable i32 IMAGE_WIDTH       = 3456;
 global_variable i32 SAMPLES_PER_PIXEL = 100;
 global_variable i32 MAX_RAY_BOUNCES   = 10;
+global_variable f32 VERTICAL_FIELD_OF_VIEW = 20.0f;
+global_variable point3 LOOK_FROM = _Point3(-2, 2, 1);
+global_variable point3 LOOK_AT = _Point3(0, 0, -1);
+global_variable vec3 WORLD_UP = _Vec3(0, 1, 0);
 
 // Note: look at compiler and linker flags
+
+internal f32
+Tan_f32(f32 Radians)
+{
+	return tanf(Radians);
+}
+
+internal f32
+DegreesToRadians(f32 Degrees)
+{
+    return Degrees * PI / 180.0f;
+}
 
 struct camera
 {
@@ -54,6 +91,9 @@ struct camera
     point3 ViewportUpperLeft;
 };
 
+using simd::normalize;
+using simd::cross;
+
 internal void
 _Camera(camera *Camera)
 {
@@ -66,32 +106,25 @@ _Camera(camera *Camera)
     Camera->MaxRayBounces     = MAX_RAY_BOUNCES;
 
     f32 FocalLength           = 1.0f;
-    f32 ViewportHeight        = 2.0f;
+	f32 Theta = DegreesToRadians(VERTICAL_FIELD_OF_VIEW);
+	f32 h = Tan_f32(Theta / 2);
+	f32 ViewportHeight = 2 * h * FocalLength;
     f32 ViewportWidth    = ViewportHeight * ((f32)IMAGE_WIDTH / IMAGE_HEIGHT);
 
-    Camera->Center       = simd_make_float3(0, 0, 0);
+    Camera->Center       = LOOK_FROM;
 
-    vec3 Viewport_U      = simd_make_float3(ViewportWidth, 0, 0);
-    vec3 Viewport_V      = simd_make_float3(0, -ViewportHeight, 0);
+	vec3 Back = normalize(LOOK_FROM - LOOK_AT);
+	vec3 Right = normalize(cross(WORLD_UP, Back));
+	vec3 Up = cross(Back, Right);
+
+	vec3 Viewport_U = ViewportWidth * Right;
+	vec3 Viewport_V = -ViewportHeight * Up;
 
     Camera->PixelDelta_U = Viewport_U / Camera->ImageWidth;
     Camera->PixelDelta_V = Viewport_V / Camera->ImageHeight;
 
-    Camera->ViewportUpperLeft = Camera->Center -
-                                simd_make_float3(0, 0, FocalLength) -
-                                (Viewport_U / 2) - (Viewport_V / 2);
-}
-
-internal color3
-_Color3(f32 X, f32 Y, f32 Z)
-{
-    return simd_make_float3(X, Y, Z);
-}
-
-internal point3
-_Point3(f32 X, f32 Y, f32 Z)
-{
-    return simd_make_float3(X, Y, Z);
+	Camera->ViewportUpperLeft = Camera->Center - (FocalLength * Back) - 
+								(Viewport_U / 2) - (Viewport_V / 2);
 }
 
 enum material_type : u32
@@ -110,14 +143,31 @@ struct material
 };
 
 internal material
-_Material(material_type Type, color3 Albedo, f32 Fuzz, f32 RefractionIndex)
+_Lambertian(color3 Albedo)
 {
-    material Result;
-    Result.Type            = Type;
-    Result.Albedo          = Albedo;
-    Result.Fuzz            = Fuzz;
-    Result.RefractionIndex = RefractionIndex;
-    return Result;
+	material Result;
+	Result.Type = LAMBERTIAN;
+	Result.Albedo = Albedo;
+	return Result;
+}
+
+internal material
+_Metal(color3 Albedo, f32 Fuzz)
+{
+	material Result;
+	Result.Type = METAL;
+	Result.Albedo = Albedo;
+	Result.Fuzz = Fuzz;
+	return Result;
+}
+
+internal material
+_Dielectric(f32 RefractionIndex)
+{
+	material Result;
+	Result.Type = DIELECTRIC;
+	Result.RefractionIndex = RefractionIndex;
+	return Result;
 }
 
 struct sphere
@@ -296,14 +346,11 @@ main(i32 argc, const char *argv[])
 
         [RenderCommandEncoder setVertexBuffer:VertexBuffer offset:0 atIndex:0];
 
-        material Ground = _Material(LAMBERTIAN, _Color3(0.8f, 0.8f, 0.0f), 0,
-                                    0);
-        material Center = _Material(LAMBERTIAN, _Color3(0.1f, 0.2f, 0.5f), 0,
-                                    0);
-        material Left   = _Material(DIELECTRIC, _Color3(0, 0, 0), 0, 1.50f);
-        material Bubble = _Material(DIELECTRIC, _Color3(0, 0, 0), 0,
-                                    1.00f / 1.50f);
-        material Right  = _Material(METAL, _Color3(0.8f, 0.6f, 0.2f), 0, 0);
+		material Ground = _Lambertian(_Color3(0.8f, 0.8f, 0.0f));
+		material Center = _Lambertian(_Color3(0.1f, 0.2f, 0.5f));
+		material Left = _Dielectric(1.50f);
+		material Bubble = _Dielectric(1.00f / 1.50f);
+		material Right = _Metal(_Color3(0.8f, 0.6f, 0.2f), 0);
 
         sphere   Spheres[10];
         Spheres[0] = _Sphere(100.0f, _Point3(0.0f, -100.5f, -1.0f), Ground);
