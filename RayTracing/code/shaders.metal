@@ -116,15 +116,15 @@ RandomVectorOnHemisphere(vec3 Normal, thread rng *RNG)
 internal vec3
 RandomVectorInUnitDisk(thread rng *RNG)
 {
-	while(true)
-	{
-		vec3 Vector = vec3(Random_f32_InRange(-1, 1, RNG),
-						   Random_f32_InRange(-1, 1, RNG), 0);
-		if(LengthSq_vec3(Vector) < 1)
-		{
-			return Vector;
-		}
-	}
+    while(true)
+    {
+        vec3 Vector = vec3(Random_f32_InRange(-1, 1, RNG),
+                           Random_f32_InRange(-1, 1, RNG), 0);
+        if(LengthSq_vec3(Vector) < 1)
+        {
+            return Vector;
+        }
+    }
 }
 
 internal bool
@@ -144,13 +144,13 @@ struct camera
     i32    SamplesPerPixel;
     f32    PixelSamplesScale;
     i32    MaxRayBounces;
-	f32 DefocusAngle;
+    f32    DefocusAngle;
     point3 Center;
     vec3   PixelDelta_U;
     vec3   PixelDelta_V;
     point3 ViewportUpperLeft;
-	vec3 DefocusDisk_U;
-	vec3 DefocusDisk_V;
+    vec3   DefocusDisk_U;
+    vec3   DefocusDisk_V;
 };
 
 struct interval
@@ -245,7 +245,7 @@ struct sphere
 
 struct world
 {
-    constant sphere *Spheres;
+    device sphere *Spheres;
     u32              SphereCount;
 };
 
@@ -467,10 +467,10 @@ RayColor(ray Ray, i32 RayBouncesRemaining, world World, thread rng *RNG)
 internal point3
 DefocusDiskSample(constant camera *Camera, thread rng *RNG)
 {
-	vec3 RandomOffset = RandomVectorInUnitDisk(RNG);
-	point3 Result = Camera->Center + (RandomOffset.x * Camera->DefocusDisk_U) +
-					(RandomOffset.y * Camera->DefocusDisk_V);
-	return Result;
+    vec3   RandomOffset = RandomVectorInUnitDisk(RNG);
+    point3 Result = Camera->Center + (RandomOffset.x * Camera->DefocusDisk_U) +
+                    (RandomOffset.y * Camera->DefocusDisk_V);
+    return Result;
 }
 
 internal ray
@@ -482,7 +482,9 @@ GetRandomRay(i32 x, i32 y, constant camera *Camera, thread rng *RNG)
                           ((x + Offset.x) * Camera->PixelDelta_U) +
                           ((y + Offset.y) * Camera->PixelDelta_V);
 
-	point3 RayOrigin = (Camera->DefocusAngle <= 0) ? Camera->Center : DefocusDiskSample(Camera, RNG);
+    point3 RayOrigin    = (Camera->DefocusAngle <= 0)
+                              ? Camera->Center
+                              : DefocusDiskSample(Camera, RNG);
 
     vec3   RayDirection = PixelSample - RayOrigin;
 
@@ -529,7 +531,7 @@ VertexFunction(vertex_in Vertex [[stage_in]])
 
 [[fragment]] fragment_out
 FragmentFunction(vertex_out       Fragment [[stage_in]],
-                 constant sphere *Spheres [[buffer(1)]],
+                 device sphere *Spheres [[buffer(1)]],
                  constant u32    *SphereCount [[buffer(2)]],
                  constant camera *Camera [[buffer(3)]])
 {

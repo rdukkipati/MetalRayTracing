@@ -6,10 +6,10 @@
 
 #include <simd/simd.h>
 
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
 
 #define internal        static
 #define local_persist   static
@@ -36,12 +36,53 @@ typedef simd_float3 vec3;
 typedef simd_float3 point3;
 typedef simd_float3 color3;
 
-#define PI       3.14159265359f
+#define PI 3.14159265359f
 
-using simd::normalize;
 using simd::cross;
 using simd::length;
 using simd::length_squared;
+using simd::normalize;
+
+struct rng
+{
+    u64 State;
+    u64 SequenceConstant;
+};
+
+internal u32
+Random_u32(rng *RNG)
+{
+    u64 OldState   = RNG->State;
+    RNG->State     = OldState * 6364136223846793005ULL + RNG->SequenceConstant;
+    u32 Xorshifted = ((OldState >> 18u) ^ OldState) >> 27u;
+    u32 Rot        = OldState >> 59u;
+    return (Xorshifted >> Rot) | (Xorshifted << ((-Rot) & 31));
+}
+
+internal void
+InitializeRNG(rng *RNG, u64 InitialState, u64 StreamID)
+{
+    RNG->State            = 0U;
+    RNG->SequenceConstant = (StreamID << 1u) | 1u;
+    Random_u32(RNG);
+    RNG->State += InitialState;
+    Random_u32(RNG);
+}
+
+internal f32
+Random_f32(rng *RNG)
+{
+    u32 Value  = Random_u32(RNG);
+    u32 Bits   = (Value >> 9) | 0x3f800000;
+    f32 Result = *(f32 *)&Bits;
+    return Result - 1.0f;
+}
+
+internal f32
+Random_f32_InRange(f32 Min, f32 Max, rng *RNG)
+{
+    return Min + (Max - Min) * Random_f32(RNG);
+}
 
 internal color3
 _Color3(f32 X, f32 Y, f32 Z)
@@ -58,26 +99,41 @@ _Point3(f32 X, f32 Y, f32 Z)
 internal vec3
 _Vec3(f32 X, f32 Y, f32 Z)
 {
-	return simd_make_float3(X, Y, Z);
+    return simd_make_float3(X, Y, Z);
 }
 
-global_variable i32 IMAGE_HEIGHT      = 2234;
-global_variable i32 IMAGE_WIDTH       = 3456;
-global_variable i32 SAMPLES_PER_PIXEL = 100;
-global_variable i32 MAX_RAY_BOUNCES   = 10;
-global_variable f32 VERTICAL_FIELD_OF_VIEW = 20.0f;
-global_variable point3 LOOK_FROM = _Point3(-2, 2, 1);
-global_variable point3 LOOK_AT = _Point3(0, 0, -1);
-global_variable vec3 WORLD_UP = _Vec3(0, 1, 0);
-global_variable f32 DEFOCUS_ANGLE = 10.0f;
-global_variable f32 FOCUS_DISTANCE = 3.4f;
+internal color3
+RandomColor(rng *RNG)
+{
+    return _Color3(Random_f32(RNG), Random_f32(RNG), Random_f32(RNG));
+}
+
+internal color3
+RandomColor_InRange(f32 Min, f32 Max, rng *RNG)
+{
+    return _Color3(Random_f32_InRange(Min, Max, RNG),
+                   Random_f32_InRange(Min, Max, RNG),
+                   Random_f32_InRange(Min, Max, RNG));
+}
+
+global_variable i32    IMAGE_HEIGHT           = 2234;
+global_variable i32    IMAGE_WIDTH            = 3456;
+global_variable i32    SAMPLES_PER_PIXEL      = 20;
+global_variable i32    MAX_RAY_BOUNCES        = 10;
+global_variable f32    VERTICAL_FIELD_OF_VIEW = 20.0f;
+global_variable point3 LOOK_FROM              = _Point3(13, 2, 3);
+global_variable point3 LOOK_AT                = _Point3(0, 0, 0);
+global_variable vec3   WORLD_UP               = _Vec3(0, 1, 0);
+global_variable f32    DEFOCUS_ANGLE          = 0.6f;
+global_variable f32    FOCUS_DISTANCE         = 10.0f;
+#define WORLD_SIZE 500
 
 // Note: look at compiler and linker flags
 
 internal f32
 Tan_f32(f32 Radians)
 {
-	return tanf(Radians);
+    return tanf(Radians);
 }
 
 internal f32
@@ -93,13 +149,13 @@ struct camera
     i32    SamplesPerPixel;
     f32    PixelSamplesScale;
     i32    MaxRayBounces;
-	f32 DefocusAngle;
+    f32    DefocusAngle;
     point3 Center;
     vec3   PixelDelta_U;
     vec3   PixelDelta_V;
     point3 ViewportUpperLeft;
-	vec3 DefocusDisk_U;
-	vec3 DefocusDisk_V;
+    vec3   DefocusDisk_U;
+    vec3   DefocusDisk_V;
 };
 
 internal void
@@ -113,32 +169,32 @@ _Camera(camera *Camera)
 
     Camera->MaxRayBounces     = MAX_RAY_BOUNCES;
 
-	f32 Theta = DegreesToRadians(VERTICAL_FIELD_OF_VIEW);
-	f32 h = Tan_f32(Theta / 2);
-	f32 ViewportHeight = 2 * h * FOCUS_DISTANCE;
+    f32 Theta                 = DegreesToRadians(VERTICAL_FIELD_OF_VIEW);
+    f32 h                     = Tan_f32(Theta / 2);
+    f32 ViewportHeight        = 2 * h * FOCUS_DISTANCE;
     f32 ViewportWidth    = ViewportHeight * ((f32)IMAGE_WIDTH / IMAGE_HEIGHT);
 
     Camera->Center       = LOOK_FROM;
 
-	vec3 Back = normalize(LOOK_FROM - LOOK_AT);
-	vec3 Right = normalize(cross(WORLD_UP, Back));
-	vec3 Up = cross(Back, Right);
+    vec3 Back            = normalize(LOOK_FROM - LOOK_AT);
+    vec3 Right           = normalize(cross(WORLD_UP, Back));
+    vec3 Up              = cross(Back, Right);
 
-	vec3 Viewport_U = ViewportWidth * Right;
-	vec3 Viewport_V = -ViewportHeight * Up;
+    vec3 Viewport_U      = ViewportWidth * Right;
+    vec3 Viewport_V      = -ViewportHeight * Up;
 
     Camera->PixelDelta_U = Viewport_U / Camera->ImageWidth;
     Camera->PixelDelta_V = Viewport_V / Camera->ImageHeight;
 
-	Camera->ViewportUpperLeft = Camera->Center - (FOCUS_DISTANCE * Back) - 
-								(Viewport_U / 2) - (Viewport_V / 2);
+    Camera->ViewportUpperLeft = Camera->Center - (FOCUS_DISTANCE * Back) -
+                                (Viewport_U / 2) - (Viewport_V / 2);
 
-	Camera->DefocusAngle = DEFOCUS_ANGLE;
-	
-	f32 DefocusRadius = FOCUS_DISTANCE * 
-						Tan_f32(DegreesToRadians(DEFOCUS_ANGLE / 2));
-	Camera->DefocusDisk_U = Right * DefocusRadius;
-	Camera->DefocusDisk_V = Up * DefocusRadius;
+    Camera->DefocusAngle      = DEFOCUS_ANGLE;
+
+    f32 DefocusRadius         = FOCUS_DISTANCE *
+                                Tan_f32(DegreesToRadians(DEFOCUS_ANGLE / 2));
+    Camera->DefocusDisk_U     = Right * DefocusRadius;
+    Camera->DefocusDisk_V     = Up * DefocusRadius;
 }
 
 enum material_type : u32
@@ -159,29 +215,29 @@ struct material
 internal material
 _Lambertian(color3 Albedo)
 {
-	material Result;
-	Result.Type = LAMBERTIAN;
-	Result.Albedo = Albedo;
-	return Result;
+    material Result;
+    Result.Type   = LAMBERTIAN;
+    Result.Albedo = Albedo;
+    return Result;
 }
 
 internal material
 _Metal(color3 Albedo, f32 Fuzz)
 {
-	material Result;
-	Result.Type = METAL;
-	Result.Albedo = Albedo;
-	Result.Fuzz = Fuzz;
-	return Result;
+    material Result;
+    Result.Type   = METAL;
+    Result.Albedo = Albedo;
+    Result.Fuzz   = Fuzz;
+    return Result;
 }
 
 internal material
 _Dielectric(f32 RefractionIndex)
 {
-	material Result;
-	Result.Type = DIELECTRIC;
-	Result.RefractionIndex = RefractionIndex;
-	return Result;
+    material Result;
+    Result.Type            = DIELECTRIC;
+    Result.RefractionIndex = RefractionIndex;
+    return Result;
 }
 
 struct sphere
@@ -199,6 +255,21 @@ _Sphere(f32 Radius, point3 Center, material Material)
     Result.Center   = Center;
     Result.Material = Material;
     return Result;
+}
+
+struct world
+{
+    sphere Spheres[WORLD_SIZE];
+    i32    Count;
+};
+
+internal void
+WorldAdd(world *World, sphere Sphere)
+{
+    if(World->Count < WORLD_SIZE)
+    {
+        World->Spheres[World->Count++] = Sphere;
+    }
 }
 
 struct state
@@ -360,34 +431,65 @@ main(i32 argc, const char *argv[])
 
         [RenderCommandEncoder setVertexBuffer:VertexBuffer offset:0 atIndex:0];
 
-		material Ground = _Lambertian(_Color3(0.8f, 0.8f, 0.0f));
-		material Center = _Lambertian(_Color3(0.1f, 0.2f, 0.5f));
-		material Left = _Dielectric(1.50f);
-		material Bubble = _Dielectric(1.00f / 1.50f);
-		material Right = _Metal(_Color3(0.8f, 0.6f, 0.2f), 0);
+        material Ground = _Lambertian(_Color3(0.5f, 0.5f, 0.5f));
+        
+        rng      RNG;
+        InitializeRNG(&RNG, 1223, 832);
+        world World = {};
+        WorldAdd(&World, _Sphere(1000, _Point3(0, -1000, 0), Ground));
+        for(i32 a = -11; a < 11; ++a)
+        {
+            for(i32 b = -11; b < 11; ++b)
+            {
+                f32    ChooseMaterial = Random_f32(&RNG);
+                point3 Center = _Point3(a + 0.9f * Random_f32(&RNG), 0.2f,
+                                        b + 0.9f * Random_f32(&RNG));
+                if(length(Center - _Point3(4, 0.2f, 0)) > 0.9f)
+                {
+                    material Material;
+                    if(ChooseMaterial < 0.8f)
+                    {
+                        color3 Albedo = RandomColor(&RNG) * RandomColor(&RNG);
+                        Material      = _Lambertian(Albedo);
+                        WorldAdd(&World, _Sphere(0.2f, Center, Material));
+                    }
+                    else if(ChooseMaterial < 0.95)
+                    {
+                        color3 Albedo = RandomColor_InRange(0.5f, 1, &RNG);
+                        f32    Fuzz   = Random_f32_InRange(0, 0.5f, &RNG);
+                        Material      = _Metal(Albedo, Fuzz);
+                        WorldAdd(&World, _Sphere(0.2f, Center, Material));
+                    }
+                    else
+                    {
+                        Material = _Dielectric(1.5f);
+                        WorldAdd(&World, _Sphere(0.2f, Center, Material));
+                    }
+                }
+            }
+        }
+        material Material1 = _Dielectric(1.5f);
+        WorldAdd(&World, _Sphere(1.0f, _Point3(0, 1, 0), Material1));
 
-        sphere   Spheres[10];
-        Spheres[0] = _Sphere(100.0f, _Point3(0.0f, -100.5f, -1.0f), Ground);
-        Spheres[1] = _Sphere(0.5f, _Point3(0.0f, 0.0f, -1.2f), Center);
-        Spheres[2] = _Sphere(0.5f, _Point3(-1.0f, 0.0f, -1.0f), Left);
-        Spheres[3] = _Sphere(0.4f, _Point3(-1.0f, 0.0f, -1.0f), Bubble);
-        Spheres[4] = _Sphere(0.5f, _Point3(1.0f, 0.0f, -1.0f), Right);
+        material Material2 = _Lambertian(_Color3(0.4f, 0.2f, 0.1f));
+        WorldAdd(&World, _Sphere(1.0f, _Point3(-4, 1, 0), Material2));
+
+        material Material3 = _Metal(_Color3(0.7f, 0.6f, 0.5f), 0);
+        WorldAdd(&World, _Sphere(1.0f, _Point3(4, 1, 0), Material3));
 
         // Note: Buffers expensive to create
-        id<MTLBuffer> SphereBuffer = [Device newBufferWithBytes:Spheres
-                                                         length:sizeof(Spheres)
+        id<MTLBuffer> SphereBuffer = [Device newBufferWithBytes:World.Spheres
+                                                         length:sizeof(World.Spheres)
                                                         options:0];
 
         [RenderCommandEncoder setFragmentBuffer:SphereBuffer
                                          offset:0
                                         atIndex:1];
 
-        u32           SphereCount       = 5;
-
         // Note: Buffers expensive to create
         id<MTLBuffer> SphereCountBuffer = [Device
-            newBufferWithBytes:&SphereCount
-                        length:sizeof(SphereCount)
+            newBufferWithBytes:&World.Count
+                        length:sizeof(World.Count)
                        options:0];
 
         [RenderCommandEncoder setFragmentBuffer:SphereCountBuffer

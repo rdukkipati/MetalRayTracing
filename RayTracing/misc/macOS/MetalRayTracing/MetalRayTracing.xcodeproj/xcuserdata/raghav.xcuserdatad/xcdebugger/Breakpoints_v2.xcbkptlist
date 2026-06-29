@@ -16,7 +16,7 @@
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "62"
             endingLineNumber = "62"
-            landmarkName = "_Vec3(X, Y, Z)"
+            landmarkName = "InitializeRNG(RNG, InitialState, StreamID)"
             landmarkType = "9">
          </BreakpointContent>
       </BreakpointProxy>
