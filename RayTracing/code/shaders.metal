@@ -113,6 +113,20 @@ RandomVectorOnHemisphere(vec3 Normal, thread rng *RNG)
     }
 }
 
+internal vec3
+RandomVectorInUnitDisk(thread rng *RNG)
+{
+	while(true)
+	{
+		vec3 Vector = vec3(Random_f32_InRange(-1, 1, RNG),
+						   Random_f32_InRange(-1, 1, RNG), 0);
+		if(LengthSq_vec3(Vector) < 1)
+		{
+			return Vector;
+		}
+	}
+}
+
 internal bool
 VectorNearZero(vec3 Vector)
 {
@@ -130,11 +144,13 @@ struct camera
     i32    SamplesPerPixel;
     f32    PixelSamplesScale;
     i32    MaxRayBounces;
-	f32 VerticalFieldOfView;
+	f32 DefocusAngle;
     point3 Center;
     vec3   PixelDelta_U;
     vec3   PixelDelta_V;
     point3 ViewportUpperLeft;
+	vec3 DefocusDisk_U;
+	vec3 DefocusDisk_V;
 };
 
 struct interval
@@ -448,6 +464,15 @@ RayColor(ray Ray, i32 RayBouncesRemaining, world World, thread rng *RNG)
     return Color;
 }
 
+internal point3
+DefocusDiskSample(constant camera *Camera, thread rng *RNG)
+{
+	vec3 RandomOffset = RandomVectorInUnitDisk(RNG);
+	point3 Result = Camera->Center + (RandomOffset.x * Camera->DefocusDisk_U) +
+					(RandomOffset.y * Camera->DefocusDisk_V);
+	return Result;
+}
+
 internal ray
 GetRandomRay(i32 x, i32 y, constant camera *Camera, thread rng *RNG)
 {
@@ -457,7 +482,7 @@ GetRandomRay(i32 x, i32 y, constant camera *Camera, thread rng *RNG)
                           ((x + Offset.x) * Camera->PixelDelta_U) +
                           ((y + Offset.y) * Camera->PixelDelta_V);
 
-    point3 RayOrigin    = Camera->Center;
+	point3 RayOrigin = (Camera->DefocusAngle <= 0) ? Camera->Center : DefocusDiskSample(Camera, RNG);
 
     vec3   RayDirection = PixelSample - RayOrigin;
 

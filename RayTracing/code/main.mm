@@ -1,5 +1,6 @@
 #include <Foundation/Foundation.h>
 #include <Metal/Metal.h>
+
 #include <limits.h>
 #include <mach-o/dyld.h>
 
@@ -37,6 +38,11 @@ typedef simd_float3 color3;
 
 #define PI       3.14159265359f
 
+using simd::normalize;
+using simd::cross;
+using simd::length;
+using simd::length_squared;
+
 internal color3
 _Color3(f32 X, f32 Y, f32 Z)
 {
@@ -63,6 +69,8 @@ global_variable f32 VERTICAL_FIELD_OF_VIEW = 20.0f;
 global_variable point3 LOOK_FROM = _Point3(-2, 2, 1);
 global_variable point3 LOOK_AT = _Point3(0, 0, -1);
 global_variable vec3 WORLD_UP = _Vec3(0, 1, 0);
+global_variable f32 DEFOCUS_ANGLE = 10.0f;
+global_variable f32 FOCUS_DISTANCE = 3.4f;
 
 // Note: look at compiler and linker flags
 
@@ -85,14 +93,14 @@ struct camera
     i32    SamplesPerPixel;
     f32    PixelSamplesScale;
     i32    MaxRayBounces;
+	f32 DefocusAngle;
     point3 Center;
     vec3   PixelDelta_U;
     vec3   PixelDelta_V;
     point3 ViewportUpperLeft;
+	vec3 DefocusDisk_U;
+	vec3 DefocusDisk_V;
 };
-
-using simd::normalize;
-using simd::cross;
 
 internal void
 _Camera(camera *Camera)
@@ -105,10 +113,9 @@ _Camera(camera *Camera)
 
     Camera->MaxRayBounces     = MAX_RAY_BOUNCES;
 
-    f32 FocalLength           = 1.0f;
 	f32 Theta = DegreesToRadians(VERTICAL_FIELD_OF_VIEW);
 	f32 h = Tan_f32(Theta / 2);
-	f32 ViewportHeight = 2 * h * FocalLength;
+	f32 ViewportHeight = 2 * h * FOCUS_DISTANCE;
     f32 ViewportWidth    = ViewportHeight * ((f32)IMAGE_WIDTH / IMAGE_HEIGHT);
 
     Camera->Center       = LOOK_FROM;
@@ -123,8 +130,15 @@ _Camera(camera *Camera)
     Camera->PixelDelta_U = Viewport_U / Camera->ImageWidth;
     Camera->PixelDelta_V = Viewport_V / Camera->ImageHeight;
 
-	Camera->ViewportUpperLeft = Camera->Center - (FocalLength * Back) - 
+	Camera->ViewportUpperLeft = Camera->Center - (FOCUS_DISTANCE * Back) - 
 								(Viewport_U / 2) - (Viewport_V / 2);
+
+	Camera->DefocusAngle = DEFOCUS_ANGLE;
+	
+	f32 DefocusRadius = FOCUS_DISTANCE * 
+						Tan_f32(DegreesToRadians(DEFOCUS_ANGLE / 2));
+	Camera->DefocusDisk_U = Right * DefocusRadius;
+	Camera->DefocusDisk_V = Up * DefocusRadius;
 }
 
 enum material_type : u32
