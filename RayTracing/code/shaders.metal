@@ -246,7 +246,7 @@ struct sphere
 struct world
 {
     device sphere *Spheres;
-    u32              SphereCount;
+    u32            SphereCount;
 };
 
 struct hit
@@ -531,9 +531,9 @@ VertexFunction(vertex_in Vertex [[stage_in]])
 
 [[fragment]] fragment_out
 FragmentFunction(vertex_out       Fragment [[stage_in]],
-                 device sphere *Spheres [[buffer(1)]],
-                 constant u32    *SphereCount [[buffer(2)]],
-                 constant camera *Camera [[buffer(3)]])
+                 device sphere   *Spheres [[buffer(0)]],
+                 constant u32    *SphereCount [[buffer(1)]],
+                 constant camera *Camera [[buffer(2)]])
 {
 
     u32 x         = (u32)Fragment.Position.x;

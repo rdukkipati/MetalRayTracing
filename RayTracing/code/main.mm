@@ -375,16 +375,10 @@ main(i32 argc, const char *argv[])
         MTLRenderPassDescriptor *RenderPassDescriptor =
             [MTLRenderPassDescriptor renderPassDescriptor];
 
-        RenderPassDescriptor.colorAttachments[0].texture = Texture;
-        RenderPassDescriptor.colorAttachments[0].loadAction =
-            MTLLoadActionDontCare;
+        RenderPassDescriptor.colorAttachments[0].texture    = Texture;
+        RenderPassDescriptor.colorAttachments[0].loadAction = MTLLoadActionLoad;
         RenderPassDescriptor.colorAttachments[0].storeAction =
             MTLStoreActionStore;
-
-        id<MTLCommandBuffer> CommandBuffer = [CommandQueue commandBuffer];
-
-        id<MTLRenderCommandEncoder>  RenderCommandEncoder = [CommandBuffer
-            renderCommandEncoderWithDescriptor:RenderPassDescriptor];
 
         MTLRenderPipelineDescriptor *RenderPipelineDescriptor =
             [[MTLRenderPipelineDescriptor alloc] init];
@@ -415,9 +409,7 @@ main(i32 argc, const char *argv[])
             newRenderPipelineStateWithDescriptor:RenderPipelineDescriptor
                                            error:&Errors];
 
-        [RenderCommandEncoder setRenderPipelineState:RenderPipelineState];
-
-        float VerticesAndUVs[] = {
+        float                      VerticesAndUVs[]    = {
             -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 1.0f,  0.0f, 0.0f,
             1.0f,  -1.0f, 1.0f, 1.0f, 1.0f,  -1.0f, 1.0f, 1.0f,
             -1.0f, 1.0f,  0.0f, 0.0f, 1.0f,  1.0f,  1.0f, 0.0f,
@@ -429,11 +421,9 @@ main(i32 argc, const char *argv[])
                         length:sizeof(VerticesAndUVs)
                        options:0];
 
-        [RenderCommandEncoder setVertexBuffer:VertexBuffer offset:0 atIndex:0];
+        material      Ground       = _Lambertian(_Color3(0.5f, 0.5f, 0.5f));
 
-        material Ground = _Lambertian(_Color3(0.5f, 0.5f, 0.5f));
-        
-        rng      RNG;
+        rng           RNG;
         InitializeRNG(&RNG, 1223, 832);
         world World = {};
         WorldAdd(&World, _Sphere(1000, _Point3(0, -1000, 0), Ground));
@@ -478,13 +468,10 @@ main(i32 argc, const char *argv[])
         WorldAdd(&World, _Sphere(1.0f, _Point3(4, 1, 0), Material3));
 
         // Note: Buffers expensive to create
-        id<MTLBuffer> SphereBuffer = [Device newBufferWithBytes:World.Spheres
-                                                         length:sizeof(World.Spheres)
-                                                        options:0];
-
-        [RenderCommandEncoder setFragmentBuffer:SphereBuffer
-                                         offset:0
-                                        atIndex:1];
+        id<MTLBuffer> SphereBuffer      = [Device
+            newBufferWithBytes:World.Spheres
+                        length:sizeof(World.Spheres)
+                       options:0];
 
         // Note: Buffers expensive to create
         id<MTLBuffer> SphereCountBuffer = [Device
@@ -492,27 +479,57 @@ main(i32 argc, const char *argv[])
                         length:sizeof(World.Count)
                        options:0];
 
-        [RenderCommandEncoder setFragmentBuffer:SphereCountBuffer
-                                         offset:0
-                                        atIndex:2];
-
-        camera Camera = {};
+        camera        Camera            = {};
         _Camera(&Camera);
         id<MTLBuffer> CameraBuffer = [Device newBufferWithBytes:&Camera
                                                          length:sizeof(Camera)
                                                         options:0];
+        id<MTLCommandBuffer> CommandBuffer = [CommandQueue commandBuffer];
+        id<MTLRenderCommandEncoder> RenderCommandEncoder = [CommandBuffer
+            renderCommandEncoderWithDescriptor:RenderPassDescriptor];
+        [RenderCommandEncoder setRenderPipelineState:RenderPipelineState];
+        [RenderCommandEncoder setVertexBuffer:VertexBuffer offset:0 atIndex:0];
+
+        [RenderCommandEncoder setFragmentBuffer:SphereBuffer
+                                         offset:0
+                                        atIndex:0];
+
+        [RenderCommandEncoder setFragmentBuffer:SphereCountBuffer
+                                         offset:0
+                                        atIndex:1];
+
         [RenderCommandEncoder setFragmentBuffer:CameraBuffer
                                          offset:0
-                                        atIndex:3];
+                                        atIndex:2];
 
-        [RenderCommandEncoder drawPrimitives:MTLPrimitiveTypeTriangle
-                                 vertexStart:0
-                                 vertexCount:6];
+        i32 GridSize   = 1;
+        i32 TotalTiles = GridSize * GridSize;
+        f64 TileWidth  = IMAGE_WIDTH / GridSize;
+        f64 TileHeight = IMAGE_HEIGHT / GridSize;
+        for(i32 Row = 0; Row < GridSize; ++Row)
+        {
+            for(i32 Col = 0; Col < GridSize; ++Col)
+            {
+
+                f64         OriginX = Col * TileWidth;
+                f64         OriginY = Row * TileHeight;
+                MTLViewport Viewport;
+                Viewport.originX = OriginX;
+                Viewport.originY = OriginY;
+                Viewport.width   = TileWidth;
+                Viewport.height  = TileHeight;
+                Viewport.znear   = 0.0;
+                Viewport.zfar    = 1.0;
+                [RenderCommandEncoder setViewport:Viewport];
+                [RenderCommandEncoder drawPrimitives:MTLPrimitiveTypeTriangle
+                                         vertexStart:0
+                                         vertexCount:6];
+            }
+        }
 
         [RenderCommandEncoder endEncoding];
         [CommandBuffer commit];
-
-        [CommandBuffer waitUntilCompleted]; // IMAGE_WIDTH IMAGE_HEIGHT
+        [CommandBuffer waitUntilCompleted];
 
         u8 *Pixels = (u8 *)malloc(IMAGE_HEIGHT * (IMAGE_WIDTH * 4));
 
